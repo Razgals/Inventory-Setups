@@ -289,18 +289,8 @@ body { display: flex; flex-direction: column; min-width: 300px; min-height: 100v
 <div id="main-content">
   <div id="sidebar">
     <div class="sidebar-label">Setups</div>
-    <div class="setup-row">
-      <button class="sidebar-btn active" data-setup="0">Setup 1</button>
-      <button class="rename-btn" data-rename="0" title="Rename">✏️</button>
-    </div>
-    <div class="setup-row">
-      <button class="sidebar-btn" data-setup="1">Setup 2</button>
-      <button class="rename-btn" data-rename="1" title="Rename">✏️</button>
-    </div>
-    <div class="setup-row">
-      <button class="sidebar-btn" data-setup="2">Setup 3</button>
-      <button class="rename-btn" data-rename="2" title="Rename">✏️</button>
-    </div>
+    <div id="setup-list"></div>
+    <button class="sidebar-btn" id="add-setup-btn" style="margin-top:.25rem;text-align:center;">+ Add Setup</button>
 
     <div class="sidebar-label" style="margin-top:.5rem">Actions</div>
     <button class="sidebar-btn" id="clear-inv-btn">Clear Inv</button>
@@ -59529,8 +59519,6 @@ const WORN_DEF = [
 
 const NUM_INV    = 28;
 const NUM_WORN   = 15;
-const NUM_SETUPS = 3;
-
 // ── State ──
 let setups = [];
 let currentSetup = 0;
@@ -59547,12 +59535,11 @@ function loadState() {
     const s = localStorage.getItem('lostkit_inv_v3');
     if (s) { setups = JSON.parse(s); }
   } catch(e){}
-  // Pad arrays in case saved data has fewer slots than current layout
   setups.forEach(setup => {
     while (setup.inv.length  < NUM_INV)   setup.inv.push(null);
     while (setup.worn.length < NUM_WORN)  setup.worn.push(null);
   });
-  while (setups.length < NUM_SETUPS) setups.push(emptySetup('Setup '+(setups.length+1)));
+  if (setups.length === 0) setups.push(emptySetup('Setup 1'));
 }
 function saveState() {
   try { localStorage.setItem('lostkit_inv_v3', JSON.stringify(setups)); } catch(e){}
@@ -59620,12 +59607,88 @@ function render() {
   document.getElementById('current-setup-title').textContent = setup.name;
   const usedSlots = setup.inv.filter(Boolean).length;
   document.getElementById('inv-free-count').textContent = (NUM_INV - usedSlots) + '/' + NUM_INV;
-  document.querySelectorAll('.sidebar-btn[data-setup]').forEach((b, i) => {
-    const name = setups[i]?.name || ('Setup '+(i+1));
-    const len = name.length;
-    b.textContent = name;
-    b.style.fontSize = len <= 12 ? '.72rem' : len <= 16 ? '.62rem' : len <= 20 ? '.54rem' : '.46rem';
-    b.classList.toggle('active', i === currentSetup);
+
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const list = document.getElementById('setup-list');
+  list.innerHTML = '';
+  const showDelete = setups.length > 1;
+
+  setups.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'setup-row';
+
+    const btn = document.createElement('button');
+    btn.className = 'sidebar-btn' + (i === currentSetup ? ' active' : '');
+    btn.dataset.setup = i;
+    const len = s.name.length;
+    btn.style.fontSize = len <= 12 ? '.72rem' : len <= 16 ? '.62rem' : len <= 20 ? '.54rem' : '.46rem';
+    btn.textContent = s.name;
+    btn.addEventListener('click', () => { currentSetup = i; render(); });
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'rename-btn';
+    renameBtn.title = 'Rename';
+    renameBtn.textContent = '\u270f\ufe0f';
+    renameBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'btn-rename-input';
+      input.maxLength = 24;
+      input.value = setups[i].name;
+      btn.textContent = '';
+      btn.appendChild(input);
+      input.focus();
+      input.select();
+      const finish = () => {
+        const val = input.value.trim();
+        setups[i].name = val || ('Setup ' + (i + 1));
+        saveState(); render();
+      };
+      input.addEventListener('blur', finish);
+      input.addEventListener('keydown', e => {
+        if (e.key === ' ') { e.preventDefault(); }
+        if (e.key === 'Enter') { input.blur(); }
+        if (e.key === 'Escape') { input.value = setups[i].name; input.blur(); }
+        e.stopPropagation();
+      });
+      const updateInputSize = () => {
+        const len = input.value.length;
+        if (len <= 12)       input.style.fontSize = '.72rem';
+        else if (len <= 16)  input.style.fontSize = '.62rem';
+        else if (len <= 20)  input.style.fontSize = '.54rem';
+        else                 input.style.fontSize = '.46rem';
+        if (len >= input.maxLength) {
+          input.classList.add('at-limit');
+          input.addEventListener('animationend', () => input.classList.remove('at-limit'), { once: true });
+        }
+      };
+      input.addEventListener('input', updateInputSize);
+      updateInputSize();
+    });
+
+    row.appendChild(btn);
+    row.appendChild(renameBtn);
+
+    if (showDelete) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'rename-btn';
+      delBtn.title = 'Delete setup';
+      delBtn.textContent = '\ud83d\uddd1\ufe0f';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete "' + setups[i].name + '"? This cannot be undone.')) return;
+        setups.splice(i, 1);
+        if (currentSetup >= setups.length) currentSetup = setups.length - 1;
+        saveState(); render();
+      });
+      row.appendChild(delBtn);
+    }
+
+    list.appendChild(row);
   });
 }
 
@@ -59803,49 +59866,11 @@ function migrateItem(item) {
 }
 
 // ── Sidebar ──
-document.querySelectorAll('.sidebar-btn[data-setup]').forEach((btn, i) => {
-  btn.addEventListener('click', () => { currentSetup = i; render(); });
-});
-
-document.querySelectorAll('.rename-btn[data-rename]').forEach((pencil) => {
-  pencil.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const i = parseInt(pencil.dataset.rename);
-    const btn = document.querySelector(`.sidebar-btn[data-setup="${i}"]`);
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'btn-rename-input';
-    input.maxLength = 24;
-    input.value = setups[i].name;
-    btn.textContent = '';
-    btn.appendChild(input);
-    input.focus();
-    input.select();
-    const finish = () => {
-      const val = input.value.trim();
-      setups[i].name = val || ('Setup ' + (i + 1));
-      saveState(); render();
-    };
-    input.addEventListener('blur', finish);
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { input.blur(); }
-      if (e.key === 'Escape') { input.value = setups[i].name; input.blur(); }
-      e.stopPropagation();
-    });
-    const updateInputSize = () => {
-      const len = input.value.length;
-      if (len <= 12)       input.style.fontSize = '.72rem';
-      else if (len <= 16)  input.style.fontSize = '.62rem';
-      else if (len <= 20)  input.style.fontSize = '.54rem';
-      else                 input.style.fontSize = '.46rem';
-      if (len >= input.maxLength) {
-        input.classList.add('at-limit');
-        input.addEventListener('animationend', () => input.classList.remove('at-limit'), { once: true });
-      }
-    };
-    input.addEventListener('input', updateInputSize);
-    updateInputSize();
-  });
+document.getElementById('add-setup-btn').addEventListener('click', () => {
+  const n = setups.length + 1;
+  setups.push(emptySetup('Setup ' + n));
+  currentSetup = setups.length - 1;
+  saveState(); render();
 });
 document.getElementById('clear-inv-btn').addEventListener('click', () => {
   if (confirm('Clear inventory?')) { setups[currentSetup].inv = Array(NUM_INV).fill(null); saveState(); render(); }
