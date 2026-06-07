@@ -59472,16 +59472,20 @@ function drawSprite(canvas, itemId, qty = 1, displaySize = SPRITE_SIZE) {
   const sx  = col * SPRITE_SIZE;
   const sy  = row * SPRITE_SIZE;
 
-  canvas.width  = displaySize;
-  canvas.height = displaySize;
+  // Always render at 2x (64x64) for clean pixel scaling, CSS shrinks to displaySize
+  const RENDER_SIZE = SPRITE_SIZE * 2;
+  canvas.width  = RENDER_SIZE;
+  canvas.height = RENDER_SIZE;
+  canvas.style.width  = displaySize + 'px';
+  canvas.style.height = displaySize + 'px';
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, displaySize, displaySize);
+  ctx.clearRect(0, 0, RENDER_SIZE, RENDER_SIZE);
   ctx.imageSmoothingEnabled = false;
 
   function draw(bmp) {
     if (!bmp) return;
     if (sx + SPRITE_SIZE > bmp.width || sy + SPRITE_SIZE > bmp.height) return;
-    ctx.drawImage(bmp, sx, sy, SPRITE_SIZE, SPRITE_SIZE, 0, 0, displaySize, displaySize);
+    ctx.drawImage(bmp, sx, sy, SPRITE_SIZE, SPRITE_SIZE, 0, 0, RENDER_SIZE, RENDER_SIZE);
   }
 
   if (spritesheet) {
